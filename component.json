@@ -7,7 +7,7 @@
     "requirejs": "2.1.x",
     "jquery": "1.9.x",
     "underscore": "1.4.x",
-    "backbone": "1.0.x",
+	"backbone": "git://github.com/dbk2/backbone.git#1.0.0-1",
     "benchmark": "git://github.com/bestiejs/benchmark.js.git"
   },
   "exportsOverride": {
