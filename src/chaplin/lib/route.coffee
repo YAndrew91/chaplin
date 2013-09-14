@@ -60,12 +60,12 @@ module.exports = class Route
         propertiesCount++
         property = criteria[name]
         return false if property and property isnt this[name]
-      return false if propertiesCount is 1 and name in ['action', 'controller']
-      true
+      invalidParamsCount = propertiesCount is 1 and name in ['action', 'controller']
+      not invalidParamsCount
 
   # Generates route URL from params.
   reverse: (params, query) ->
-    params = @normalizeParams(params)
+    params = @normalizeParams params
     return false if params is false
 
     url = @pattern
@@ -77,7 +77,7 @@ module.exports = class Route
       value = params[name]
       url = url.replace ///[:*]#{name}///g, value
 
-    return url if not query
+    return url unless query
 
     # Stringify query params if needed.
     if typeof query is 'object'
@@ -96,14 +96,14 @@ module.exports = class Route
       for paramName, paramIndex in @paramNames
         paramsHash[paramName] = params[paramIndex]
 
-      return false if not @testConstraints paramsHash
+      return false unless @testConstraints paramsHash
 
       params = paramsHash
     else
       # null or undefined params are equivalent to an empty hash
       params ?= {}
 
-      return false if not @testParams params
+      return false unless @testParams params
 
     params
 
@@ -115,7 +115,7 @@ module.exports = class Route
       for own name, constraint of constraints
         return false unless constraint.test params[name]
 
-    return true
+    true
 
   # Test if passed params hash matches current route.
   testParams: (params) ->
@@ -160,27 +160,27 @@ module.exports = class Route
     if constraints
       return @testConstraints @extractParams path
 
-    return true
+    true
 
   # The handler called by Backbone.History when the route matches.
   # It is also called by Router#route which might pass options.
   handler: (pathParams, options) =>
     options = if options then _.clone options else {}
 
-    # pathDesc may be an object with params for reversing or a simple URL.
+    # pathDesc may be either an object with params for reversing or a simple URL.
     if typeof pathParams is 'object'
-      queryParams = options.query
-      delete options.query
-      query = utils.QueryParams.stringify queryParams
+      query = utils.QueryParams.stringify options.query
       params = pathParams
       path = @reverse params
     else
       [path, query] = pathParams.split '?'
-      query ?= ''
-      queryParams = utils.QueryParams.parse query
+      if not query?
+        query = ''
+      else
+        options.query = utils.QueryParams.parse query
       params = @extractParams path
 
-    actionParams = _.extend {}, queryParams, params, @options.params
+    actionParams = _.extend {}, params, @options.params
 
     # Construct a route object to forward to the match event.
     route = {path, @action, @controller, @name, query}
