@@ -316,7 +316,7 @@ module.exports = (grunt) ->
     bower:
       install:
         options:
-          targetDir: './test/components'
+          targetDir: './test/bower_components'
           cleanup: true
 
     # Test runner
@@ -439,10 +439,10 @@ module.exports = (grunt) ->
   # Releasing
   # ---------
 
-  grunt.registerTask 'check:versions:component', 'Check that package.json and component.json versions match', ->
-    componentVersion = grunt.file.readJSON('component.json').version
+  grunt.registerTask 'check:versions:component', 'Check that package.json and bower.json versions match', ->
+    componentVersion = grunt.file.readJSON('bower.json').version
     unless componentVersion is pkg.version
-      grunt.fail.warn "component.json is version #{componentVersion}, package.json is #{pkg.version}."
+      grunt.fail.warn "bower.json is version #{componentVersion}, package.json is #{pkg.version}."
     else
       grunt.log.ok()
 

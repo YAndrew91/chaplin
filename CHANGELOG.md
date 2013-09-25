@@ -1,6 +1,8 @@
-# Chaplin 0.11.0 (unreleased)
+# Chaplin 0.11.0 (21 September 2013)
 * Chaplin internals now use *Request / Response* pattern instead of
-  bang `!events`. New system allows to return values.
+  bang `!events`. New system also allows to return values.
+  The syntax is so: `mediator.setHandler(name, function)`,
+  `mediator.execute(name, args...)`.
   Removed events:
     * `!router:route`, `!router:routeByName` (use `helpers.redirectTo`)
     * `!router:changeURL`
@@ -14,6 +16,7 @@
         * by default, returns the composition itself
         * if composition body returned a promise, it returns a promise too
     * Removed `Controller#redirectToRoute`. Use `Controller#redirectTo`.
+    * `redirectTo` now takes route name by default. If you want to pass URL, use it as `redirectTo({url: 'URL'})`.
 * Improved `Chaplin.View`:
     * Added `noWrap` option that allows to disable Backbone top-level
       element bound to view class.
@@ -21,11 +24,27 @@
       be picked from an object passed to View, when initialising it.
       Property allows to simply extend it in your child classes:
       `optionNames: ParentView.prototype.optionNames.concat(['template'])`
+    * Views now appended to DOM only if they were not there.
+* Improved `Chaplin.Layout`:
+    * When push state is disabled, internal links are handled as if they had `#` (gh-664).
 * Improved `Chaplin.helpers`:
-    * Added `helpers.redirectTo` which allows to re.
+    * Added `helpers.redirectTo` which allows to redirect to other route
+      or url.
 * Improved `Chaplin.utils`:
-    * `utils.getPrototypeChain` now returns prototypes from oldest to newest,
-      to match `utils.getAllPropertyVersions`.
+    * Added `utils.queryParams.{stringify,parse}`.
+    * `utils.getPrototypeChain` now returns prototypes from
+      oldest to newest, to match `utils.getAllPropertyVersions`.
+* Improved `Chaplin.Router`:
+    * `Route::reverse` (as well as `Router::reverse`) are now able to add query parameters to the reversed URL, no matter if they are already stringified or not when passed into the reverse (as a third parameter).
+    * `Route::matches` improved not to return `true` when the only `controller` or `action` parameter passed.
+    * Fixed `getCurrentQuery` error when `pushState` is disabled (gh-671).
+    * Query params are now not copied to next routes (gh-677).
+* Improved `Chaplin.Application`:
+    * Renamed `startRouting` to `start`, the following method also does freezing of app object.
+* Temporarily added `Chaplin.History` that overrides `Backbone.History`.
+  It won't not ignore query string history as compared to Backbone (gh-577).
+
+Special thanks to [Andrew Yankovsky](https://github.com/YAndrew91).
 
 # Chaplin 0.10.0 (30 June 2013)
 Chaplin now provides universal build for Common.js and AMD.

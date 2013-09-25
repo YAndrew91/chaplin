@@ -10,6 +10,7 @@ temp*
 # Local package dependencies
 /node_modules
 components
+bower_components
 
 # Coverage report
 coverage*
