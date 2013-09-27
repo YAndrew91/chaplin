@@ -27,12 +27,19 @@ module.exports = class Composition
   # The options that this composition was constructed with.
   options: null
 
+  #
+  dependencies: null
+
   # Whether this composition is currently stale.
   _stale: false
+
+  #
+  promise: null
 
   constructor: (options) ->
     @options = _.extend {}, options if options?
     @item = this
+    @dependencies = []
     @initialize @options
 
   initialize: ->
@@ -40,6 +47,10 @@ module.exports = class Composition
 
   # The compose method is called when this composition is to be composed.
   compose: ->
+    # Empty per default.
+
+  #
+  update: ->
     # Empty per default.
 
   # The check method is called when this composition is asked to be
