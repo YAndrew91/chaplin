@@ -128,15 +128,10 @@ module.exports = class Composer
       #
       if current.check composition.options
         #
-        current.update = composition.update
+        promise = @_mergeComposition current, composition, promise
 
         #
         composition = current
-
-        #
-        if current.promise
-          promise = current.promise.then -> promise
-          delete current.promise
       else
         #
         current.dispose()
@@ -206,6 +201,19 @@ module.exports = class Composer
 
         this
 
+    promise
+
+  _mergeComposition: (current, composition, promise) ->
+    #
+    current.update = composition.update
+
+    #
+    if current.promise
+      _promise = promise
+      promise = current.promise.then -> _promise
+      delete current.promise
+
+    #
     promise
 
   _resolveDependencies: (composition, promise) ->
