@@ -53,6 +53,10 @@ module.exports = class Composition
   update: ->
     # Empty per default.
 
+  #
+  afterDispose: ->
+    # Empty per default.
+
   # The check method is called when this composition is asked to be
   # composed again. The passed options are the newly passed options.
   # If this returns false then the composition is re-composed.

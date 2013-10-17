@@ -178,6 +178,8 @@ module.exports = class Composer
 
       composition.update = options.update if options.update
 
+      composition.afterDispose = options.afterDispose if options.afterDispose
+
     composition
 
   _createPromise: ->
@@ -297,6 +299,8 @@ module.exports = class Composer
     return if filter and not filter composition
 
     composition.dispose()
+
+    composition.afterDispose.apply null
 
     delete @compositions[name]
 
