@@ -20,12 +20,12 @@ module.exports = class Route
   # e.g. new Route '/users/:id', 'users', 'show', { some: 'options' }
   constructor: (@pattern, @controller, @action, options) ->
     # Disallow regexp routes.
-    if _.isRegExp @pattern
+    if typeof @pattern isnt 'string'
       throw new Error 'Route: RegExps are not supported.
         Use strings with :names and `constraints` option of route'
 
     # Clone options.
-    @options = if options then _.clone(options) else {}
+    @options = if options then _.extend({}, options) else {}
 
     # Store the name on the route if given
     @name = @options.name if @options.name?
@@ -41,7 +41,7 @@ module.exports = class Route
     @paramNames = []
 
     # Check if the action is a reserved name
-    if _.has Controller.prototype, @action
+    if @action of Controller.prototype
       throw new Error 'Route: You should not use existing controller ' +
         'properties as action names'
 
@@ -88,7 +88,7 @@ module.exports = class Route
 
   # Validates incoming params and returns them in a unified form - hash
   normalizeParams: (params) ->
-    if _.isArray params
+    if utils.isArray params
       # Ensure we have enough parameters.
       return false if params.length < @paramNames.length
 
@@ -166,7 +166,7 @@ module.exports = class Route
   # The handler called by Backbone.History when the route matches.
   # It is also called by Router#route which might pass options.
   handler: (pathParams, options) =>
-    options = if options then _.clone options else {}
+    options = if options then _.extend {}, options else {}
 
     # pathDesc may be either an object with params for reversing or a simple URL.
     if typeof pathParams is 'object'

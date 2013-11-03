@@ -37,9 +37,9 @@ module.exports = class Layout extends View
     @title = options.title
     @regions = options.regions if options.regions
     @settings = _.defaults options,
-      titleTemplate: _.template(
-        "<% if (subtitle) { %><%= subtitle %> \u2013 <% } %><%= title %>"
-      )
+      titleTemplate: (data) ->
+        st = if data.subtitle then "#{data.subtitle} \u2013 " else ''
+        st + data.title
       openExternalToBlank: false
       routeLinks: 'a, .go-to'
       skipRouting: '.noscript'
@@ -61,7 +61,7 @@ module.exports = class Layout extends View
   # -------------------------------
 
   # Handler for the global beforeControllerDispose event.
-  scroll: (controller) ->
+  scroll: ->
     # Reset the scroll position.
     position = @settings.scrollTo
     if position
@@ -84,11 +84,18 @@ module.exports = class Layout extends View
 
   startLinkRouting: ->
     route = @settings.routeLinks
-    @$el.on 'click', route, @openLink if route
+    return unless route
+    if $
+      @$el.on 'click', route, @openLink
+    else
+      @delegate 'click', route, @openLink
 
   stopLinkRouting: ->
     route = @settings.routeLinks
-    @$el.off 'click', route if route
+    if $
+      @$el.off 'click', route if route
+    else
+      @undelegate 'click', route, @openLink
 
   isExternalLink: (link) ->
     link.target is '_blank' or
@@ -100,12 +107,11 @@ module.exports = class Layout extends View
   openLink: (event) =>
     return if utils.modifierKeyPressed(event)
 
-    el = event.currentTarget
-    $el = $(el)
+    el = if $ then event.currentTarget else event.delegateTarget
     isAnchor = el.nodeName is 'A'
 
     # Get the href and perform checks on it.
-    href = $el.attr('href') or $el.data('href') or null
+    href = el.getAttribute('href') or el.getAttribute('data-href') or null
 
     # Basic href checks.
     return if not href? or
@@ -119,7 +125,7 @@ module.exports = class Layout extends View
     skipRouting = @settings.skipRouting
     type = typeof skipRouting
     return if type is 'function' and not skipRouting(href, el) or
-      type is 'string' and $el.is skipRouting
+      type is 'string' and (if $ then $(el).is(skipRouting) else Backbone.utils.matchesSelector el, skipRouting)
 
     # Handle external links.
     external = isAnchor and @isExternalLink el
@@ -132,7 +138,7 @@ module.exports = class Layout extends View
 
     # Pass to the router, try to route the path internally.
     helpers.redirectTo url: href
-    
+
     # Prevent default handling if the URL could be routed.
     event.preventDefault()
     return
@@ -181,18 +187,20 @@ module.exports = class Layout extends View
   # Unregisters a specific named region from a view.
   unregisterGlobalRegion: (instance, name) ->
     cid = instance.cid
-    @globalRegions = _.filter @globalRegions, (region) ->
+    @globalRegions = (region for region in @globalRegions when (
       region.instance.cid isnt cid or region.name isnt name
+    ))
 
   # When views are disposed; remove all their registered regions.
   unregisterGlobalRegions: (instance) ->
-    @globalRegions = _.filter @globalRegions, (region) ->
+    @globalRegions = (region for region in @globalRegions when (
       region.instance.cid isnt instance.cid
+    ))
 
   # Returns the region by its name, if found.
   regionByName: (name) ->
-    _.find @globalRegions, (region) ->
-      region.name is name and not region.instance.stale
+    for reg in @globalRegions when reg.name is name and not reg.instance.stale
+      return reg
 
   # When views are instantiated and request for a region assignment;
   # attempt to fulfill it.
@@ -205,12 +213,18 @@ module.exports = class Layout extends View
 
     # Apply the region selector.
     instance.container = if region.selector is ''
-      region.instance.$el
+      if $
+        region.instance.$el
+      else
+        region.instance.el
     else
       if region.instance.noWrap
-        $(region.instance.container).find region.selector
+        if $
+          $(region.instance.container).find region.selector
+        else
+          region.instance.container.querySelector region.selector
       else
-        region.instance.$ region.selector
+        region.instance[if $ then '$' else 'find'] region.selector
 
   # Disposal
   # --------

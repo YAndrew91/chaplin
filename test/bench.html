@@ -3,27 +3,23 @@
   <head>
     <meta charset="UTF-8">
     <title>Chaplin Test Runner</title>
-    <script src="components/benchmark/benchmark.js"></script>
-    <script src="components/requirejs/require.js"></script>
+    <script src="bower_components/benchmark/benchmark.js"></script>
+    <script src="bower_components/requirejs/require.js"></script>
     <script>
       requirejs.config({
         baseUrl: 'temp/',
         paths: {
-          jquery: '../components/jquery/jquery',
-          underscore: '../components/underscore/underscore',
-          backbone: '../components/backbone/backbone'
-        },
-        shim: {
-          backbone: {
-            deps: ['underscore', 'jquery'],
-            exports: 'Backbone'
-          },
-          underscore: {
-            exports: '_'
-          }
+          // jquery: '../bower_components/jquery/jquery',
+          // underscore: '../bower_components/lodash/dist/lodash.compat',
+          backbone: '../bower_components/exoskeleton/exoskeleton'
         },
         // For easier development, disable browser caching
         urlArgs: 'bust=' + (new Date()).getTime()
+      });
+
+      define('jquery', function(){});
+      define('underscore', ['backbone'], function(Backbone){
+        return Backbone.utils;
       });
 
       require(['chaplin'], function(Chaplin) {
@@ -46,84 +42,74 @@
             .on('complete', log);
         };
 
-        var bench = function(dict) {
-          Object.keys(dict).forEach(function(name) {
-            console.time(name);
+        var bench = function(title, dict) {
+          var paragraphs = Object.keys(dict).map(function(name) {
+            var start = Date.now();
             dict[name]();
-            console.timeEnd(name);
+            return {name: name, time: Date.now() - start};
+          }).map(function(item) {
+            return item.name + ': ' + item.time + 'ms'
           });
+          var insert = function(html) {
+            document.body.insertAdjacentHTML('afterbegin', '<p>' + html + '</p>');
+          };
+          paragraphs.forEach(insert)
+          insert('<h3>' + title + '</h3>');
         };
 
         var collectionBench = function() {
-          var models = _.range(65, 165).map(function(code) {
-            return {
-              id: String.fromCharCode(code),
-              title: String(Math.random())
-            };
-          });
+          var models = [];
+          for (var code = 65; code <= 1565; code++) {
+            models.push({
+              id: code,
+              char: String.fromCharCode(code),
+              title: String(Math.random()).slice(2)
+            });
+          }
 
           var BaseItemView = Chaplin.View.extend({
             tagName: 'li',
             attributes: function() {
-              return {id: this.model.id, cid: this.model.cid};
+              var m = this.model;
+              return {className: m.char, 'data-cid': m.cid};
             },
             template: function(data) {
-              return data.title;
+              return data.char + ' - ' + data.title;
             },
             getTemplateFunction: function() {
               return this.template;
             }
           });
 
-          var noCheckView = new Chaplin.CollectionView({
-            collection: new Chaplin.Collection(),
-            itemView: BaseItemView.extend({
-              attach: function() {
-                Chaplin.View.prototype.attach.call(this);
-              }
-            })
+          var View = Chaplin.CollectionView.extend({
+            animationDuration: 0,
+            container: document.body,
+            itemView: BaseItemView
           });
 
-          var propCheckView = new Chaplin.CollectionView({
-            collection: new Chaplin.Collection(),
-            itemView: BaseItemView.extend({
-              attach: function() {
-                if (!this.attached) {
-                  this.attached = true;
-                  Chaplin.View.prototype.attach.call(this);
-                }
-              }
-            })
-          });
-
-          var domCheckView = new Chaplin.CollectionView({
-            collection: new Chaplin.Collection(),
-            itemView: BaseItemView.extend({
-              attach: function() {
-                if (!document.body.contains(this.el)) {
-                  Chaplin.View.prototype.attach.call(this);
-                }
-              }
-            })
-          });
-
-          var gf = function(collview) {
-            collview.subviews.forEach(function(_) {_.render();});
+          var items = {
+            50: new Chaplin.Collection(models.slice(0, 50)),
+            100: new Chaplin.Collection(models.slice(50, 150)),
+            200: new Chaplin.Collection(models.slice(150, 350)),
+            500: new Chaplin.Collection(models.slice(0, 500)),
+            1500: new Chaplin.Collection(models)
           };
-          noCheckView.collection.reset(models);
-          propCheckView.collection.reset(models);
-          domCheckView.collection.reset(models);
 
-
-          bench({
-            'Without contains': function() {
-              gf(noCheckView);
+          bench('Rendering collection views', {
+            '50 items': function() {
+              new View({collection: items['50'], className: '50'});
             },
-            'With attr contains': function() {
-              gf(propCheckView);
+            '100 items': function() {
+              new View({collection: items['100'], className: '100'});
             },
-            'With DOM contains': function() {
-              gf(domCheckView);
+            '200 items': function() {
+              new View({collection: items['200'], className: '200'});
+            },
+            '500 items': function() {
+              new View({collection: items['500'], className: '500'});
+            },
+            '1500 items': function() {
+              new View({collection: items['1500'], className: '1500'});
             }
           });
         };

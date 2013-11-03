@@ -60,6 +60,11 @@ module.exports = class Router # This class does not extend Backbone.Router.
   stopHistory: ->
     Backbone.history.stop() if Backbone.History.started
 
+  # Search through backbone history handlers.
+  findHandler: (predicate) ->
+    for handler in Backbone.history.handlers when predicate handler
+      return handler
+
   # Connect an address with a controller action.
   # Creates a route on the Backbone.History instance.
   match: (pattern, target, options = {}) =>
@@ -94,7 +99,10 @@ module.exports = class Router # This class does not extend Backbone.Router.
   # accepts an absolute URL with a leading slash (e.g. /foo)
   # and passes the routing options to the callback function.
   route: (pathDesc, params, options) ->
-    params = if params then _.clone(params) else {}
+    params = if params
+      if utils.isArray(params) then params.slice() else _.extend {}, params
+    else
+      {}
 
     # Try to extract an URL from the pathDesc if it's a hash.
     path = pathDesc.url if typeof pathDesc is 'object'
@@ -106,16 +114,16 @@ module.exports = class Router # This class does not extend Backbone.Router.
       path = path.replace @removeRoot, ''
 
       # Find a matching route.
-      handler = _.find Backbone.history.handlers, (handler) -> handler.route.test path
+      handler = @findHandler (handler) -> handler.route.test path
 
       # Options is the second argument in this case.
       options = params
       params = null
     else
-      options = if options then _.clone(options) else {}
+      options = if options then _.extend {}, options else {}
 
       # Find a route using a passed via pathDesc string route name.
-      handler = _.find Backbone.history.handlers, (handler) ->
+      handler = @findHandler (handler) ->
         if handler.route.matches pathDesc
           params = handler.route.normalizeParams(params)
           return true if params

@@ -1,6 +1,6 @@
 {
   "name": "chaplin",
-  "version": "0.11.1-dev-3",
+  "version": "0.11.3-dev",
   "description": "An Application Architecture Using Backbone.js",
   "repository": "git://github.com/YAndrew91/chaplin.git",
   "devDependencies": {
@@ -17,9 +17,9 @@
     "grunt-urequire": "git://github.com/concordusapps/grunt-urequire",
     "grunt-coffeelint": "0.0.x",
     "grunt-mocha": "0.2.x",
-    "grunt-transbrute": "~0.1.1",
+    "grunt-transbrute": "~0.2.0",
     "prompt": "0.2.x",
-    "phantomjs": "1.8.x"
+    "phantomjs": "1.9.x"
   },
   "main": "build/chaplin.js",
   "scripts": {

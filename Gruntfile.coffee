@@ -98,6 +98,8 @@ module.exports = (grunt) ->
         ]
       downloads:
         message: "Release #{pkg.version}."
+        tag: pkg.version
+        tagMessage: "Version #{pkg.version}."
         remote: 'git@github.com:YAndrew91/downloads.git'
         branch: 'gh-pages'
         files: [
@@ -273,7 +275,7 @@ module.exports = (grunt) ->
           regDeps(require('backbone'), require('underscore'));
           module.exports = loader('chaplin');
         } else if (typeof require === 'function') {
-          regDeps(window.Backbone, window._);
+          regDeps(window.Backbone, window._ || window.Backbone.utils);
           window.Chaplin = loader('chaplin');
         } else {
           throw new Error('Chaplin requires Common.js or AMD modules');
@@ -333,7 +335,7 @@ module.exports = (grunt) ->
     # ------
     uglify:
       options:
-        mangle: false
+        mangle: true
       universal:
         files:
           'build/chaplin.min.js': 'build/chaplin.js'
