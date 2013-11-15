@@ -52,28 +52,34 @@ module.exports = class Composer
   # Constructs a composition and composes into the active compositions.
   # This function has several forms as described below:
   #
-  # 1. compose('name', Class[, options])
+  # 1. compose('name', Class[, options][, dependencies])
   #    Composes a class object. The options are passed to the class when
   #    an instance is contructed and are further used to test if the
-  #    composition should be re-composed.
+  #    composition should be re-composed. Dependencies are used to define
+  #    compositions required by this one and provide access to them.
+  #    Compositions are resolved from specified names and are passed
+  #    to compose and update methods.
   #
   # 2. compose('name', function)
   #    Composes a function that executes in the context of the controller;
   #    do NOT bind the function context.
   #
-  # 3. compose('name', options, function)
+  # 3. compose('name', options, function[, dependencies])
   #    Composes a function that executes in the context of the controller;
   #    do NOT bind the function context and is passed the options as a
   #    parameter. The options are further used to test if the composition
-  #    should be recomposed.
+  #    should be recomposed. Dependencies are used to define compositions
+  #    required by this one and provide access to them.
   #
   # 4. compose('name', options)
   #    Gives control over the composition process; the compose method of
-  #    the options hash is executed in place of the function of form (3) and
+  #    the options hash is executed in place of the function of form (3),
+  #    the update method is executed both for new and existing composition,
   #    the check method is called (if present) to determine re-composition (
-  #    otherwise this is the same as form [3]).
+  #    otherwise this is the same as form [3]) and dependencies array is used
+  #    to define composition dependencies.
   #
-  # 5. compose('name', CompositionClass[, options])
+  # 5. compose('name', CompositionClass[, options][, dependencies])
   #    Gives complete control over the composition process.
   #
   compose: (name, second, third, fourth) ->
@@ -81,9 +87,9 @@ module.exports = class Composer
     # If the second parameter is a function we know it is (1) or (2).
     if typeof second is 'function'
       # This is form (1) or (5) with the optional options hash if the third
-      # is an obj or the second parameter's prototype has a dispose method
+      # is specified or the second parameter's prototype has a dispose method
       if third or second::dispose
-        #
+        # Handle the case when options are missing, but dependencies are specified
         if _.isArray third
           fourth = third
           third = {}
@@ -115,46 +121,45 @@ module.exports = class Composer
     return @_compose name, second
 
   _compose: (name, options) ->
-    #
+    # Create composition object from specified options
     composition = @_createComposition options
 
-    #
+    # Initialize promise object for async operation execution
     promise = @_createPromise()
 
     # Check for an existing composition
     current = @compositions[name]
-
     if current
-      #
+      # Apply the check method
       if current.check composition.options
-        #
+        # Update current composition with new one
         promise = @_mergeComposition current, composition, promise
 
-        #
+        # Reuse current composition
         composition = current
       else
-        #
+        # Remove the current composition
         current.dispose()
 
-    #
+    # Mark the current composition as not stale
     composition.stale false
 
-    #
+    # Resolve composition dependencies
     promise = @_resolveDependencies composition, promise
 
-    #
+    # Apply compose method for new composition only
     promise = @_composeComposition composition, promise if composition isnt current
 
-    #
+    # Apply update method both for new and existing composition
     promise = @_updateComposition composition, promise
 
-    #
+    # Store promise in composition when it needs async operation to complete
     composition.promise = promise if promise
 
-    #
+    # Store composition
     @compositions[name] = composition
 
-    #
+    # Return composition item or promise which will be resolved to it
     composition.promise or composition.item
 
   _createComposition: (options) ->
@@ -169,7 +174,6 @@ module.exports = class Composer
       # Create the composition and apply the methods (if available)
       composition = new Composition options.options
 
-      #
       composition.dependencies = options.dependencies if options.dependencies
 
       composition.check = options.check if options.check
@@ -180,90 +184,113 @@ module.exports = class Composer
 
       composition.afterDispose = options.afterDispose if options.afterDispose
 
+    # Return new composition
     composition
 
   _createPromise: ->
-    # Create
+    # Create action deferred object if deferredCreator is avalaible
+    # It is used to track 'dispatcher:dispatch' action and allows to execute
+    # new compositions after cleanup of old compositions
     @actionDeferred = @deferredCreator() if not @actionDeferred and @deferredCreator
 
+    # If deferred implementation is available
     if @actionDeferred
-      #
+      # Create new promise object
       promise = @actionDeferred.promise()
     else
-      #
+      # Create simple promise emulation, which:
       promise = then: (done) ->
-        #
+        # Execute done handler synchronously
         result = done @result
 
-        #
+        # Return handler result if it is promise
         return result if result and result.then
 
-        #
+        # Otherwise store result and return itself
         @result = result
-
         this
 
+    # Return new promise or its emulation
     promise
 
   _mergeComposition: (current, composition, promise) ->
-    #
+    # Take update method from new composition to use latest function context
     current.update = composition.update
 
-    #
+    # If current composition is not resolved yet, include its promise to chain
     if current.promise
       _promise = promise
       promise = current.promise.then -> _promise
       delete current.promise
 
-    #
+    # Return promise for chain
     promise
 
   _resolveDependencies: (composition, promise) ->
-    #
+    # Storage for composition items which are declared as dependencies
     resolvedDependencies = []
 
-    #
-    _.each composition.dependencies, (dependencyKey) =>
+    # Enumerate declared composition dependencies
+    _.each composition.dependencies, (dependencyName) =>
+      # Update promise chain with dependency resolving
       promise = promise.then =>
-        #
-        dependency = @compositions[dependencyKey]
+        # Resolve composition dependency
+        dependency = @compositions[dependencyName]
 
-        #
+        # Return nothing if composition does not exist
+        # or it is stale (checked for compatibility for sync execution only)
         return undefined if not dependency? or (not @deferredCreator? and dependency.stale())
 
+        # Return composition item or its promise
         dependency.promise or dependency.item
       .then (item) ->
-        #
+        # Append composition item (may be empty) to array of dependencies
         resolvedDependencies.push item
 
+    # Return promise for chain
     promise.then ->
+      # Resolve to array of dependent composition items
       resolvedDependencies
 
   _composeComposition: (composition, promise) ->
+    # Temporary storage for composition dependencies
     dependencies = null
+
+    # Return promise for chain
     promise.then (resolvedDependencies) ->
+      # Store dependencies to pass them further
       dependencies = resolvedDependencies
+
+      # Apply compose method to composition item passing as arguments
+      # options and dependent composition items
       composition.compose.apply composition.item, [composition.options].concat resolvedDependencies
     .then ->
+      # Resolve to array of dependent composition items
       dependencies
 
   _updateComposition: (composition, promise) ->
+    # Flag to detect synchronous execution
     resolved = null
 
+    # Create last promise for compose execution chain
     promise = promise.then (resolvedDependencies) ->
+      # Apply update method to composition item passing as arguments
+      # options and dependent composition items
       composition.update.apply composition.item, [composition.options].concat resolvedDependencies
     .then ->
+      # Set resolved flag
       resolved = true
 
-      #
+      # Check if composition still alive
       return if composition.disposed
 
-      #
+      # Remove promise reference from composition only if it was not renewed
       delete composition.promise if composition.promise is promise
 
+      # Resolve to composition item
       composition.item
 
-    #
+    # Return promise or nothing if already resolved
     if resolved then null else promise
 
   # Retrieves an active composition using the compose method.
@@ -272,6 +299,8 @@ module.exports = class Composer
     (if active and not active.stale() then active.promise or active.item else undefined)
 
   _buildDependentMap: ->
+    # Build map of composition dependencies in up-down direction,
+    # i.e. compositions which depend from specified
     result = {}
 
     for name, composition of @compositions
@@ -286,20 +315,25 @@ module.exports = class Composer
 
   _disposeComposition: (name, dependentMap, filter) ->
     composition = @compositions[name]
-    dependentNames = dependentMap[name]
 
     return if not composition
 
+    # Dispose compositions which depends from current first
+    dependentNames = dependentMap[name]
     if dependentNames
       for dependentName in dependentNames
         @_disposeComposition dependentName, dependentMap, filter
 
+      # Remove dependency reference to get rid of repeated dispose
       delete dependentMap[name]
 
+    # Check if composition satisfies filter condition
     return if filter and not filter composition
 
+    # Dispose composition
     composition.dispose()
 
+    # Execute after dispose callback
     composition.afterDispose.apply null
 
     delete @compositions[name]
@@ -307,8 +341,11 @@ module.exports = class Composer
   afterAction: ->
     actionDeferred = @actionDeferred
 
+    # Action method is done; perform post-action clean up
     @cleanup()
 
+    # Resolve action deferred object (if presents)
+    # to trigger async composition execution
     if actionDeferred?
       @actionDeferred = null
       actionDeferred.resolve()
@@ -316,21 +353,19 @@ module.exports = class Composer
   # Declare all compositions as stale and remove all that were previously
   # marked stale without being re-composed.
   cleanup: ->
-    #
+    # Build map of dependencies to dispose compositions in correct order
     dependentMap = @_buildDependentMap()
 
-    #
+    # Create stale composition filter function
     staleFilter = (composition) ->
       composition.stale()
 
-    #
-    # Action method is done; perform post-action clean up
     # Dispose and delete all no-longer-active compositions.
-    # Declare all active compositions as de-activated (eg. to be removed
-    # on the next controller startup unless they are re-composed).
     for name of @compositions
       this._disposeComposition name, dependentMap, staleFilter
 
+    # Declare all active compositions as de-activated (eg. to be removed
+    # on the next controller startup unless they are re-composed).
     for name, composition of @compositions
       composition.stale true
 
@@ -345,7 +380,7 @@ module.exports = class Composer
 
     mediator.removeHandlers this
 
-    #
+    # Build map of dependencies to dispose compositions in correct order
     dependentMap = @_buildDependentMap()
 
     # Dispose of all compositions and their items (that can be)
