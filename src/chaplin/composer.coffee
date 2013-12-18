@@ -338,6 +338,32 @@ module.exports = class Composer
 
     delete @compositions[name]
 
+  _waitForCompose: (action) ->
+    # Joins not resolved promises to the chain
+    promiseIterator = (actionPromise, composition) ->
+      promise = composition.promise
+
+      # Skip resolved compositions
+      return actionPromise unless promise
+
+      # Use current promise as first in chain
+      return promise unless actionPromise
+
+      # Add promise to chain
+      actionPromise.then ->
+        promise
+
+    # Collect all not resolved composition promises
+    actionPromise = _.reduce @compositions, promiseIterator, null
+
+    # If have not resolved compositions
+    if actionPromise
+      # Run action after they are resolved
+      actionPromise.then action
+    else
+      # Otherwise run action immediately
+      action()
+
   afterAction: ->
     actionDeferred = @actionDeferred
 
@@ -349,6 +375,11 @@ module.exports = class Composer
     if actionDeferred?
       @actionDeferred = null
       actionDeferred.resolve()
+
+    # Wait for all async compositions
+    @_waitForCompose =>
+      # Dispatch event when all compositions are ready
+      @publishEvent 'composer:complete'
 
   # Declare all compositions as stale and remove all that were previously
   # marked stale without being re-composed.
