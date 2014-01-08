@@ -27,13 +27,14 @@ module.exports = class Composition
   # The options that this composition was constructed with.
   options: null
 
-  #
+  # The array of composition names which this composition depends from
   dependencies: null
 
   # Whether this composition is currently stale.
   _stale: false
 
-  #
+  # Reference to promise for asynchronous compose operation
+  # (until it's in progress)
   promise: null
 
   constructor: (options) ->
@@ -49,11 +50,18 @@ module.exports = class Composition
   compose: ->
     # Empty per default.
 
-  #
+  # The update method is called when this composition is to be composed
+  # or updated.
   update: ->
     # Empty per default.
 
-  #
+  # The error method is called when this composition is failed.
+  # If returns promise - execution is continued; otherwise composition
+  # is removed from composer
+  error: ->
+    # Empty per default.
+
+  # The afterDispose method is called after this composition is disposed.
   afterDispose: ->
     # Empty per default.
 
