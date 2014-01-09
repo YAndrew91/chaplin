@@ -28,6 +28,11 @@ module.exports = class Composer
   # The collection of composed compositions
   compositions: null
 
+  # Global error handler is called when any composition compose is failed.
+  # It gets failed composition item as parameter and continue execution if
+  # returns new promise; otherwise composition is removed
+  composeError: null
+
   # Factory method returning a new instance of a deferred class
   deferredCreator: null
 
@@ -38,6 +43,9 @@ module.exports = class Composer
     @initialize arguments...
 
   initialize: (options = {}) ->
+    # Taking a global compose error handler from options
+    @composeError = options.composeError
+
     # Taking a deferred object factory function from options
     @deferredCreator = options.deferredCreator
 
@@ -153,6 +161,15 @@ module.exports = class Composer
     # Apply update method both for new and existing composition
     promise = @_updateComposition composition, promise
 
+    # Add error handling for composition
+    promise = @_errorComposition name, composition, promise
+
+    # Return nothing if composition was failed and disposed
+    return if composition.disposed
+
+    # Prepare final promise resolving to composition item
+    promise = @_completeComposition composition, promise
+
     # Store promise in composition when it needs async operation to complete
     composition.promise = promise if promise
 
@@ -181,6 +198,8 @@ module.exports = class Composer
       composition.compose = options.compose
 
       composition.update = options.update if options.update
+
+      composition.error = options.error if options.error
 
       composition.afterDispose = options.afterDispose if options.afterDispose
 
@@ -220,7 +239,10 @@ module.exports = class Composer
     # If current composition is not resolved yet, include its promise to chain
     if current.promise
       _promise = promise
-      promise = current.promise.then -> _promise
+      promise = current.promise.then ->
+        _promise
+      , ->
+        _promise
       delete current.promise
 
     # Return promise for chain
@@ -239,7 +261,7 @@ module.exports = class Composer
 
         # Return nothing if composition does not exist
         # or it is stale (checked for compatibility for sync execution only)
-        return undefined if not dependency? or (not @deferredCreator? and dependency.stale())
+        return if not dependency? or (not @deferredCreator? and dependency.stale())
 
         # Return composition item or its promise
         dependency.promise or dependency.item
@@ -269,15 +291,41 @@ module.exports = class Composer
       dependencies
 
   _updateComposition: (composition, promise) ->
+    # Return promise for chain
+    promise.then (resolvedDependencies) ->
+      # Apply update method to composition item passing as arguments
+      # options and dependent composition items
+      composition.update.apply composition.item, [composition.options].concat resolvedDependencies
+
+  _errorComposition: (name, composition, promise) ->
+    # Return promise for chain
+    promise.then (result) ->
+      # Bypass result for success
+      return result
+    , =>
+      # Otherwise apply error method to composition item
+      errorResult = composition.error.call composition.item, composition.options
+      # Apply global error handler if necessary
+      errorResult = @composeError composition.item if not errorResult? and @composeError
+      # If any handler returned promise
+      if errorResult? and errorResult.then
+        # Use it to continue execution
+        return errorResult.then (result) ->
+          # Bypass result for success
+          return result
+        , =>
+          # Otherwise dispose failed composition
+          @_disposeComposition name, {}
+      else
+        # Otherwise dispose failed composition
+        @_disposeComposition name, {}
+
+  _completeComposition: (composition, promise) ->
     # Flag to detect synchronous execution
     resolved = null
 
     # Create last promise for compose execution chain
-    promise = promise.then (resolvedDependencies) ->
-      # Apply update method to composition item passing as arguments
-      # options and dependent composition items
-      composition.update.apply composition.item, [composition.options].concat resolvedDependencies
-    .then ->
+    promise = promise.then ->
       # Set resolved flag
       resolved = true
 
@@ -337,6 +385,7 @@ module.exports = class Composer
     composition.afterDispose.apply null
 
     delete @compositions[name]
+    return
 
   _waitForCompose: (action) ->
     # Joins not resolved promises to the chain
@@ -352,6 +401,8 @@ module.exports = class Composer
       # Add promise to chain
       actionPromise.then ->
         promise
+      , ->
+        promise
 
     # Collect all not resolved composition promises
     actionPromise = _.reduce @compositions, promiseIterator, null
@@ -359,7 +410,7 @@ module.exports = class Composer
     # If have not resolved compositions
     if actionPromise
       # Run action after they are resolved
-      actionPromise.then action
+      actionPromise.then action, action
     else
       # Otherwise run action immediately
       action()
