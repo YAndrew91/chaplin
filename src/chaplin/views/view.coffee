@@ -434,6 +434,9 @@ module.exports = class View extends Backbone.View
       else
         setHTML (if $ then @$el else @el), html
 
+    # re-render all subviews
+    subview.render() for subview in @subviews
+
     # Return the view.
     this
 
