@@ -135,9 +135,9 @@ module.exports = class Route
       # Replace named parameters, collecting their names.
       .replace(/(?::|\*)(\w+)/g, @addParamName)
 
-    # Create the actual regular expression, match until the end of the URL or
-    # the begin of query string.
-    @regExp = ///^#{pattern}(?=\?|$)///
+    # Create the actual regular expression, match until the end of the URL,
+    # trailing slashes or the begin of query string.
+    @regExp = ///^#{pattern}(?=\/*(\?|$))///
 
   addParamName: (match, paramName) =>
     # Save parameter name.
