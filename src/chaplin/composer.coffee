@@ -98,7 +98,7 @@ module.exports = class Composer
       # is specified or the second parameter's prototype has a dispose method
       if third or second::dispose
         # Handle the case when options are missing, but dependencies are specified
-        if _.isArray third
+        if utils.isArray third
           fourth = third
           third = {}
 
@@ -253,21 +253,23 @@ module.exports = class Composer
     resolvedDependencies = []
 
     # Enumerate declared composition dependencies
-    _.each composition.dependencies, (dependencyName) =>
-      # Update promise chain with dependency resolving
-      promise = promise.then =>
-        # Resolve composition dependency
-        dependency = @compositions[dependencyName]
+    for dependencyName in composition.dependencies
+      # Update promise chain
+      promise = do (promise, dependencyName) =>
+        # Chain dependency resolving
+        promise.then =>
+          # Resolve composition dependency
+          dependency = @compositions[dependencyName]
 
-        # Return nothing if composition does not exist
-        # or it is stale (checked for compatibility for sync execution only)
-        return if not dependency? or (not @deferredCreator? and dependency.stale())
+          # Return nothing if composition does not exist
+          # or it is stale (checked for compatibility for sync execution only)
+          return if not dependency? or (not @deferredCreator? and dependency.stale())
 
-        # Return composition item or its promise
-        dependency.promise or dependency.item
-      .then (item) ->
-        # Append composition item (may be empty) to array of dependencies
-        resolvedDependencies.push item
+          # Return composition item or its promise
+          dependency.promise or dependency.item
+        .then (item) ->
+          # Append composition item (may be empty) to array of dependencies
+          resolvedDependencies.push item
 
     # Return promise for chain
     promise.then ->
@@ -388,24 +390,24 @@ module.exports = class Composer
     return
 
   _waitForCompose: (action) ->
-    # Joins not resolved promises to the chain
-    promiseIterator = (actionPromise, composition) ->
-      promise = composition.promise
-
-      # Skip resolved compositions
-      return actionPromise unless promise
-
-      # Use current promise as first in chain
-      return promise unless actionPromise
-
-      # Add promise to chain
-      actionPromise.then ->
-        promise
-      , ->
-        promise
-
     # Collect all not resolved composition promises
-    actionPromise = _.reduce @compositions, promiseIterator, null
+    actionPromise = null
+    for composition in @compositions
+      # Joins not resolved promises to the chain
+      actionPromise = do (actionPromise, composition) ->
+        promise = composition.promise
+
+        # Skip resolved compositions
+        return actionPromise unless promise
+
+        # Use current promise as first in chain
+        return promise unless actionPromise
+
+        # Add promise to chain
+        actionPromise.then ->
+          promise
+        , ->
+          promise
 
     # If have not resolved compositions
     if actionPromise
