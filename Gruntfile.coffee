@@ -90,7 +90,7 @@ module.exports = (grunt) ->
     # ------------------
     transbrute:
       docs:
-        remote: 'git@github.com:chaplinjs/chaplin.git'
+        remote: 'git@github.com:YAndrew91/chaplin.git'
         branch: 'gh-pages'
         files: [
           { expand: true, cwd: 'docs/', src: '**/*' }
@@ -99,7 +99,7 @@ module.exports = (grunt) ->
         message: "Release #{pkg.version}."
         tag: pkg.version
         tagMessage: "Version #{pkg.version}."
-        remote: 'git@github.com:chaplinjs/downloads.git'
+        remote: 'git@github.com:YAndrew91/downloads.git'
         branch: 'gh-pages'
         files: [
           { expand: true, cwd: 'build/', src: 'chaplin.{js,min.js}' },
@@ -107,7 +107,7 @@ module.exports = (grunt) ->
             dest: 'bower.json',
             body: {
               name: 'chaplin',
-              repo: 'chaplinjs/downloads',
+              repo: 'YAndrew91/downloads',
               version: pkg.version,
               main: 'chaplin.js',
               scripts: ['chaplin.js'],
@@ -118,7 +118,7 @@ module.exports = (grunt) ->
             dest: 'component.json',
             body: {
               name: 'chaplin',
-              repo: 'chaplinjs/downloads',
+              repo: 'YAndrew91/downloads',
               version: pkg.version,
               main: 'chaplin.js',
               scripts: ['chaplin.js'],
@@ -134,7 +134,7 @@ module.exports = (grunt) ->
               main: 'chaplin.js',
               scripts: { test: 'echo "Error: no test specified" && exit 1' },
               repository: {
-                type: 'git', url: 'git://github.com/chaplinjs/downloads.git'
+                type: 'git', url: 'git://github.com/YAndrew91/downloads.git'
               },
               author: 'Chaplin team',
               license: 'MIT',
