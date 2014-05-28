@@ -414,6 +414,12 @@ module.exports = class View extends Backbone.View
     # removed correctly).
     return false if @disposed
 
+    # Preserve events on subviews when re-rendering
+    for subview of @subviews
+      el = subview.el
+      if el and el.parentNode
+        el.parentNode.removeChild el
+
     templateFunc = @getTemplateFunction()
 
     if typeof templateFunc is 'function'
