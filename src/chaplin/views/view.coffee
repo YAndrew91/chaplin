@@ -417,7 +417,7 @@ module.exports = class View extends Backbone.View
     return false if @disposed
 
     # Preserve events on subviews when re-rendering
-    for subview of @subviews
+    for subview in @subviews
       el = subview.el
       if el and el.parentNode
         el.parentNode.removeChild el
