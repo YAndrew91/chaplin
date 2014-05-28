@@ -217,13 +217,7 @@ module.exports = class Layout extends View
       else
         region.instance.el
     else
-      if region.instance.noWrap
-        if $
-          $(region.instance.container).find region.selector
-        else
-          region.instance.container.querySelector region.selector
-      else
-        region.instance[if $ then '$' else 'find'] region.selector
+      region.instance[if $ then '$' else 'find'] region.selector
 
   # Disposal
   # --------
