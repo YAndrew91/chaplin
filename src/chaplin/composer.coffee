@@ -28,6 +28,10 @@ module.exports = class Composer
   # The collection of composed compositions
   compositions: null
 
+  # Temporary stores promises for failed compositions to reject compositions
+  # dependent from them
+  rejectedCompositionPromises: null
+
   # Global error handler is called when any composition compose is failed.
   # It gets failed composition item as parameter and continue execution if
   # returns new promise; otherwise composition is removed
@@ -51,6 +55,7 @@ module.exports = class Composer
 
     # Initialize collections.
     @compositions = {}
+    @rejectedCompositionPromises = {}
 
     # Subscribe to events.
     mediator.setHandler 'composer:compose', @compose, this
@@ -258,6 +263,9 @@ module.exports = class Composer
       promise = do (promise, dependencyName) =>
         # Chain dependency resolving
         promise.then =>
+          # Return rejected promise if dependency was failed
+          return @rejectedCompositionPromises[dependencyName] if dependencyName of @rejectedCompositionPromises
+
           # Resolve composition dependency
           dependency = @compositions[dependencyName]
 
@@ -300,6 +308,12 @@ module.exports = class Composer
       composition.update.apply composition.item, [composition.options].concat resolvedDependencies
 
   _errorComposition: (name, composition, promise) ->
+    disposeComposition = () =>
+      # Save rejected composition promise
+      @rejectedCompositionPromises[name] = composition.promise;
+      # and dispose composition
+      @_disposeComposition name, {}
+
     # Return promise for chain
     promise.then (result) ->
       # Bypass result for success
@@ -315,12 +329,11 @@ module.exports = class Composer
         return errorResult.then (result) ->
           # Bypass result for success
           return result
-        , =>
           # Otherwise dispose failed composition
-          @_disposeComposition name, {}
+        , disposeComposition
       else
         # Otherwise dispose failed composition
-        @_disposeComposition name, {}
+        disposeComposition()
 
   _completeComposition: (composition, promise) ->
     # Flag to detect synchronous execution
@@ -431,6 +444,8 @@ module.exports = class Composer
 
     # Wait for all async compositions
     @_waitForCompose =>
+      # Cleanup temporary stored rejected promises
+      @rejectedCompositionPromises = {}
       # Dispatch event when all compositions are ready
       @publishEvent 'composer:complete'
 
