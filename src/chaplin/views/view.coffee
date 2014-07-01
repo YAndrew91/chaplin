@@ -226,18 +226,25 @@ module.exports = class View extends Backbone.View
     # Return the bound handler.
     bound
 
+  # Allows to extend/wrap handler with custom logic (AOP)
+  _extendEventHandler: (selector, eventType, handler) ->
+    return handler
+
   # Copy of original Backbone method without `undelegateEvents` call.
   _delegateEvents: (events) ->
-    if Backbone.View::delegateEvents.length is 2
-      return Backbone.View::delegateEvents.call this, events, true
+    # TODO: not clear when it can be used
+#    if Backbone.View::delegateEvents.length is 2
+#      return Backbone.View::delegateEvents.call this, events, true
     for key, value of events
       handler = if typeof value is 'function' then value else this[value]
       throw new Error "Method '#{value}' does not exist" unless handler
       match = key.match /^(\S+)\s*(.*)$/
-      eventName = "#{match[1]}.delegateEvents#{@cid}"
-      selector = match[2]
+      eventType = match[1]
+      eventName = "#{eventType}.delegateEvents#{@cid}"
+      selector = match[2] or null
       bound = bind handler, this
-      @$el.on eventName, (selector or null), bound
+      extended = @_extendEventHandler selector, eventType, bound
+      @$el.on eventName, selector, extended
     return
 
   # Override Backbones method to combine the events
