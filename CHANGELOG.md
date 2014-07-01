@@ -1,5 +1,8 @@
 See [upgrading guide](http://docs.chaplinjs.org/upgrading.html) if you're using old chaplin version and want to upgrade.
 
+# Chaplin 1.0.0-dev-5 (01 Jule 2014)
+* Secret feature
+
 # Chaplin 1.0.0-dev-4 (01 Jule 2014)
 * Secret improvement
 
