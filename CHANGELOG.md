@@ -1,5 +1,8 @@
 See [upgrading guide](http://docs.chaplinjs.org/upgrading.html) if you're using old chaplin version and want to upgrade.
 
+# Chaplin 1.0.0-dev-6 (10 Jule 2014)
+* Secret update from chaplin upstream
+
 # Chaplin 1.0.0 (23 January 2014)
 * `route.previous` is now `undefined` instead of an empty object if there is no previous object.
 
