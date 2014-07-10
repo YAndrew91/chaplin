@@ -96,7 +96,11 @@ module.exports = class Router # This class does not extend Backbone.Router.
     # handlers.unshift, inserting the handler at the top of the list.
     # Since we want routes to match in the order they were specified,
     # we’re appending the route at the end.
-    Backbone.history.handlers.push {route, callback: route.handler}
+    Backbone.history.handlers.push {
+      route,
+      options: route.options.options,
+      callback: route.handler
+    }
     route
 
   # Route a given URL path manually. Returns whether a route matched.
@@ -138,7 +142,7 @@ module.exports = class Router # This class does not extend Backbone.Router.
 
     if handler
       # Update the URL programmatically after routing.
-      _.defaults options, changeURL: true
+      options = _.extend { changeURL: true }, handler.options, options
 
       pathParams = if path? then path else params
       handler.callback pathParams, options
