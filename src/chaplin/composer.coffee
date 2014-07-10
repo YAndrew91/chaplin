@@ -32,6 +32,10 @@ module.exports = class Composer
   # dependent from them
   rejectedCompositionPromises: null
 
+  # Indicated async compose level: 0 - no compose now, 1 - do compose,
+  # >1 - new compose started before previous is finished
+  composeLevel: 0,
+
   # Global error handler is called when any composition compose is failed.
   # It gets failed composition item as parameter and continue execution if
   # returns new promise; otherwise composition is removed
@@ -279,8 +283,11 @@ module.exports = class Composer
           # Append composition item (may be empty) to array of dependencies
           resolvedDependencies.push item
 
+    # Stop old compositions if new was started
+    promise.then =>
+      @deferredCreator().reject() if @composeLevel > 1 and @deferredCreator
     # Return promise for chain
-    promise.then ->
+    .then ->
       # Resolve to array of dependent composition items
       resolvedDependencies
 
@@ -433,6 +440,9 @@ module.exports = class Composer
   afterAction: ->
     actionDeferred = @actionDeferred
 
+    # Increase compose level before async compose
+    @composeLevel++
+
     # Action method is done; perform post-action clean up
     @cleanup()
 
@@ -446,8 +456,10 @@ module.exports = class Composer
     @_waitForCompose =>
       # Cleanup temporary stored rejected promises
       @rejectedCompositionPromises = {}
+      # Decrease compose level after async compose
+      @composeLevel--
       # Dispatch event when all compositions are ready
-      @publishEvent 'composer:complete'
+      @publishEvent 'composer:complete' if @composeLevel == 0
 
   # Declare all compositions as stale and remove all that were previously
   # marked stale without being re-composed.
