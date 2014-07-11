@@ -126,6 +126,8 @@ module.exports = class View extends Backbone.View
       for optName, optValue of options when optName in @optionNames
         this[optName] = optValue
 
+    @rendered = false
+
     # Wrap `render` so `attach` is called afterwards.
     # Enclose the original function.
     render = @render
@@ -414,6 +416,12 @@ module.exports = class View extends Backbone.View
     # removed correctly).
     return false if @disposed
 
+    # Preserve events on subviews when re-rendering
+    for subview in @subviews
+      el = subview.el
+      if el and el.parentNode
+        el.parentNode.removeChild el
+
     templateFunc = @getTemplateFunction()
 
     if typeof templateFunc is 'function'
@@ -429,12 +437,17 @@ module.exports = class View extends Backbone.View
           throw new Error 'There must be a single top-level element when ' +
                           'using `noWrap`.'
 
-        # Undelegate the container events that were setup.
-        @undelegateEvents()
-        # Delegate events to the top-level container in the template.
-        @setElement el.firstChild, true
+        # Rendering root tag only first time
+        if not @rendered
+          # Delegate events to the top-level container in the template.
+          @setElement el.firstChild, true
+        else
+          # NOTE: You can't change root element after a view has been rendered first time
+          setHTML (if $ then @$el else @el), el.firstChild.innerHTML
       else
         setHTML (if $ then @$el else @el), html
+
+    @rendered = true
 
     # re-render all subviews
     subview.render() for subview in @subviews
