@@ -283,11 +283,8 @@ module.exports = class Composer
           # Append composition item (may be empty) to array of dependencies
           resolvedDependencies.push item
 
-    # Stop old compositions if new was started
-    promise.then =>
-      @deferredCreator().reject(state: 'outdated') if @composeLevel > 1 and @deferredCreator
     # Return promise for chain
-    .then ->
+    promise.then ->
       # Resolve to array of dependent composition items
       resolvedDependencies
 
@@ -325,9 +322,7 @@ module.exports = class Composer
     promise.then (result) ->
       # Bypass result for success
       return result
-    , (error) =>
-      # Do nothing if composition is outdated - it will be recomposed
-      return @deferredCreator().resolve() if error? && error.state == 'outdated'
+    , =>
       # Otherwise apply error method to composition item
       errorResult = composition.error.call composition.item, composition.options
       # Apply global error handler if necessary
