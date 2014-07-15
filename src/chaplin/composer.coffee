@@ -287,11 +287,8 @@ module.exports = class Composer
           # Append composition item (may be empty) to array of dependencies
           resolvedDependencies.push item
 
-    # Stop old compositions if new was started
-    promise.then =>
-      @deferredCreator().reject() if @composeLevel > 1 and @deferredCreator
     # Return promise for chain
-    .then ->
+    promise.then ->
       # Resolve to array of dependent composition items
       resolvedDependencies
 
