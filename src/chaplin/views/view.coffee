@@ -226,9 +226,13 @@ module.exports = class View extends Backbone.View
     # Return the bound handler.
     bound
 
+  # Allows to lookup handler in custom way
+  _lookupEventHandler: (handler) ->
+    if typeof handler is 'function' then handler else this[handler]
+
   # Allows to extend/wrap handler with custom logic (AOP)
   _extendEventHandler: (selector, eventType, handler) ->
-    return handler
+    handler
 
   # Copy of original Backbone method without `undelegateEvents` call.
   _delegateEvents: (events) ->
@@ -236,7 +240,7 @@ module.exports = class View extends Backbone.View
 #    if Backbone.View::delegateEvents.length is 2
 #      return Backbone.View::delegateEvents.call this, events, true
     for key, value of events
-      handler = if typeof value is 'function' then value else this[value]
+      handler = @_lookupEventHandler value
       throw new Error "Method '#{value}' does not exist" unless handler
       match = key.match /^(\S+)\s*(.*)$/
       eventType = match[1]
