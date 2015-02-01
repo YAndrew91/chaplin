@@ -241,18 +241,19 @@ module.exports = class Composer
 
     # Enumerate declared composition dependencies
     for dependencyName in composition.dependencies
+      # Get composition dependency
+      dependency = @compositions[dependencyName]
+
+      # Assert for programmer errors
+      if not dependency? or dependency.stale()
+        throw new Error "Composition dependency '" + dependencyName + "' is not available"
+
       # Update promise chain
-      promise = do (promise, dependencyName) =>
+      promise = do (promise, dependency, dependencyName) =>
         # Chain dependency resolving
         promise.then =>
           # Return rejected promise if dependency was failed
           return @rejectedCompositionPromises[dependencyName] if dependencyName of @rejectedCompositionPromises
-
-          # Resolve composition dependency
-          dependency = @compositions[dependencyName]
-
-          # Return nothing if composition does not exist
-          return if not dependency?
 
           # Return composition item or its promise
           dependency.promise or dependency.item
