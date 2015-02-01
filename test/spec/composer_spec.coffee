@@ -52,6 +52,7 @@ define [
       composer.initialize()
       expect(composer.compositions).to.eql {}
 
+    ###
     # composing with the short form
     # -----------------------------
 
@@ -229,6 +230,7 @@ define [
       expect(->
         mediator.execute 'composer:compose', compose: /a/, check: ''
       ).to.throwError()
+    ###
 
     # disposal
     # --------

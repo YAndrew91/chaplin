@@ -578,6 +578,7 @@ define [
 
         test()
 
+      ###
       it 'should kick around promises from compositions', (done) ->
         composer = new Composer
         promise = new Davy
@@ -614,6 +615,7 @@ define [
               composer.dispose()
               done()
             , 50
+      ###
 
       it 'should stop dispatching when another controller is started', (done) ->
         promise = new Davy

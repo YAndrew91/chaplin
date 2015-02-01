@@ -63,7 +63,6 @@ module.exports = class Composer
 
     # Subscribe to events.
     mediator.setHandler 'composer:compose', @compose, this
-    mediator.setHandler 'composer:retrieve', @retrieve, this
     @subscribeEvent 'dispatcher:dispatch', @afterAction
 
   # Constructs a composition and composes into the active compositions.
@@ -77,18 +76,14 @@ module.exports = class Composer
   #    Compositions are resolved from specified names and are passed
   #    to compose and update methods.
   #
-  # 2. compose('name', function)
-  #    Composes a function that executes in the context of the controller;
-  #    do NOT bind the function context.
-  #
-  # 3. compose('name', options, function[, dependencies])
+  # 2. compose('name', options, function[, dependencies])
   #    Composes a function that executes in the context of the controller;
   #    do NOT bind the function context and is passed the options as a
   #    parameter. The options are further used to test if the composition
   #    should be recomposed. Dependencies are used to define compositions
   #    required by this one and provide access to them.
   #
-  # 4. compose('name', options)
+  # 3. compose('name', options)
   #    Gives control over the composition process; the compose method of
   #    the options hash is executed in place of the function of form (3),
   #    the update method is executed both for new and existing composition,
@@ -96,45 +91,42 @@ module.exports = class Composer
   #    otherwise this is the same as form [3]) and dependencies array is used
   #    to define composition dependencies.
   #
-  # 5. compose('name', CompositionClass[, options][, dependencies])
+  # 4. compose('name', CompositionClass[, options][, dependencies])
   #    Gives complete control over the composition process.
   #
   compose: (name, second, third, fourth) ->
     # Normalize the arguments
-    # If the second parameter is a function we know it is (1) or (2).
-    if typeof second is 'function'
-      # This is form (1) or (5) with the optional options hash if the third
-      # is specified or the second parameter's prototype has a dispose method
-      if third or second::dispose
-        # Handle the case when options are missing, but dependencies are specified
-        if utils.isArray third
-          fourth = third
-          third = {}
+    # If the second parameter is a function:
+    # This is form (1) with the optional options hash if the third
+    # is specified or (4) if the second parameter's prototype has a dispose method
+    if typeof second is 'function' and second::dispose
+      # Handle the case when options are missing, but dependencies are specified
+      if utils.isArray third
+        fourth = third
+        third = {}
 
-        # If the class is a Composition class then it is form (5).
-        if second.prototype instanceof Composition
-          return @_compose name, composition: second, options: third, dependencies: fourth
-        else
-          return @_compose name, options: third, dependencies: fourth, compose: ->
-            # The compose method here just constructs the class.
-            # Model and Collection both take `options` as the second argument.
-            if second.prototype instanceof Backbone.Model or second.prototype instanceof Backbone.Collection
-              @item = new second null, @options
-            else
-              @item = new second @options
+      # If the class is a Composition class then it is form (4).
+      if second.prototype instanceof Composition
+        return @_compose name, composition: second, options: third, dependencies: fourth
+      # Else form (1)
+      else
+        return @_compose name, options: third, dependencies: fourth, compose: ->
+          # The compose method here just constructs the class.
+          # Model and Collection both take `options` as the second argument.
+          if second.prototype instanceof Backbone.Model or second.prototype instanceof Backbone.Collection
+            @item = new second null, @options
+          else
+            @item = new second @options
 
-            # Render this item if it has a render method and it either
-            # doesn't have an autoRender property or that autoRender
-            # property is false
-            autoRender = @item.autoRender
-            disabledAutoRender = autoRender is undefined or not autoRender
-            if disabledAutoRender and typeof @item.render is 'function'
-              @item.render()
+          # Render this item if it has a render method and it either
+          # doesn't have an autoRender property or that autoRender
+          # property is false
+          autoRender = @item.autoRender
+          disabledAutoRender = autoRender is undefined or not autoRender
+          if disabledAutoRender and typeof @item.render is 'function'
+            @item.render()
 
-      # This is form (2).
-      return @_compose name, compose: second
-
-    # If the third parameter exists and is a function this is (3).
+    # If the third parameter exists and is a function this is (2).
     if typeof third is 'function'
       return @_compose name, compose: third, options: second, dependencies: fourth
 
@@ -177,20 +169,17 @@ module.exports = class Composer
     # Add error handling for composition
     promise = @_errorComposition name, composition, promise
 
-    # Return nothing if composition was failed and disposed
-    return if composition.disposed
-
     # Prepare final promise resolving to composition item
     promise = @_completeComposition composition, promise
 
     # Store promise in composition when it needs async operation to complete
-    composition.promise = promise if promise
+    composition.promise = promise
 
     # Store composition
     @compositions[name] = composition
 
     # Return composition item or promise which will be resolved to it
-    composition.promise or composition.item
+    composition.promise
 
   _createComposition: (options) ->
     # Assert for programmer errors
@@ -220,30 +209,15 @@ module.exports = class Composer
     composition
 
   _createPromise: ->
-    # Create action deferred object if deferredCreator is avalaible
-    # It is used to track 'dispatcher:dispatch' action and allows to execute
-    # new compositions after cleanup of old compositions
-    @actionDeferred = @deferredCreator() if not @actionDeferred and @deferredCreator
+    if not @deferredCreator?
+      throw new Error 'Deferred object factory function is not set'
 
-    # If deferred implementation is available
-    if @actionDeferred
-      # Create new promise object
-      promise = @actionDeferred.promise()
-    else
-      # Create simple promise emulation, which:
-      promise = then: (done) ->
-        # Execute done handler synchronously
-        result = done @result
+    # Create action deferred object to track 'dispatcher:dispatch' action and
+    # execute new compositions after cleanup of old compositions
+    @actionDeferred = @deferredCreator() if not @actionDeferred
 
-        # Return handler result if it is promise
-        return result if result and result.then
-
-        # Otherwise store result and return itself
-        @result = result
-        this
-
-    # Return new promise or its emulation
-    promise
+    # Return new promise
+    @actionDeferred.promise()
 
   _mergeComposition: (current, composition, promise) ->
     # Take update method from new composition to use latest function context
@@ -278,8 +252,7 @@ module.exports = class Composer
           dependency = @compositions[dependencyName]
 
           # Return nothing if composition does not exist
-          # or it is stale (checked for compatibility for sync execution only)
-          return if not dependency? or (not @deferredCreator? and dependency.stale())
+          return if not dependency?
 
           # Return composition item or its promise
           dependency.promise or dependency.item
@@ -318,9 +291,11 @@ module.exports = class Composer
   _errorComposition: (name, composition, promise) ->
     disposeComposition = () =>
       # Save rejected composition promise
-      @rejectedCompositionPromises[name] = composition.promise;
-      # and dispose composition
+      rejectedCompositionPromise = @rejectedCompositionPromises[name] = composition.promise;
+      # Dispose composition
       @_disposeComposition name, {}
+      # Return rejected composition promise
+      rejectedCompositionPromise
 
     # Return promise for chain
     promise.then (result) ->
@@ -344,30 +319,13 @@ module.exports = class Composer
         disposeComposition()
 
   _completeComposition: (composition, promise) ->
-    # Flag to detect synchronous execution
-    resolved = null
-
     # Create last promise for compose execution chain
-    promise = promise.then ->
-      # Set resolved flag
-      resolved = true
-
-      # Check if composition still alive
-      return if composition.disposed
-
-      # Remove promise reference from composition only if it was not renewed
+    promise.then ->
+      # TODO: Remove promise reference from composition only if it was not renewed
       delete composition.promise if composition.promise is promise
 
       # Resolve to composition item
       composition.item
-
-    # Return promise or nothing if already resolved
-    if resolved then null else promise
-
-  # Retrieves an active composition using the compose method.
-  retrieve: (name) ->
-    active = @compositions[name]
-    (if active and not active.stale() then active.promise or active.item else undefined)
 
   _buildDependentMap: ->
     # Build map of composition dependencies in up-down direction,
@@ -410,9 +368,12 @@ module.exports = class Composer
     delete @compositions[name]
     return
 
-  _waitForCompose: (action) ->
+  _waitForCompose: () ->
+    # Initialize promise to accumulate composition promises in
+    actionPromise = @deferredCreator().resolve().promise()
+
+    # TODO: Use Promise.all instead of sequence
     # Collect all not resolved composition promises
-    actionPromise = null
     for name, composition of @compositions
       # Joins not resolved promises to the chain
       actionPromise = do (actionPromise, composition) ->
@@ -421,22 +382,16 @@ module.exports = class Composer
         # Skip resolved compositions
         return actionPromise unless promise
 
-        # Use current promise as first in chain
-        return promise unless actionPromise
-
         # Add promise to chain
         actionPromise.then ->
           promise
         , ->
           promise
 
-    # If have not resolved compositions
-    if actionPromise
-      # Run action after they are resolved
-      actionPromise.then action, action
-    else
-      # Otherwise run action immediately
-      action()
+    actionPromise.then ->
+      true
+    , ->
+      false
 
   afterAction: ->
     actionDeferred = @actionDeferred
@@ -454,13 +409,13 @@ module.exports = class Composer
       actionDeferred.resolve()
 
     # Wait for all async compositions
-    @_waitForCompose =>
+    @_waitForCompose().then (success) =>
       # Cleanup temporary stored rejected promises
       @rejectedCompositionPromises = {}
       # Decrease compose level after async compose
       @composeLevel--
       # Dispatch event when all compositions are ready
-      @publishEvent 'composer:complete' if @composeLevel == 0
+      @publishEvent 'composer:complete', success if @composeLevel == 0
 
   # Declare all compositions as stale and remove all that were previously
   # marked stale without being re-composed.
