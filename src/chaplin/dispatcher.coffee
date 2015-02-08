@@ -69,6 +69,8 @@ module.exports = class Dispatcher
       _.isEqual(@currentParams, params) and
       _.isEqual(@currentQuery, options.query)
 
+    @publishEvent 'dispatcher:initializeState', route, params, options
+
     # Fetch the new controller, then go on.
     @loadController route.controller, (Controller) =>
       @controllerLoaded route, params, options, Controller

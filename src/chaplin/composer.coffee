@@ -28,21 +28,16 @@ module.exports = class Composer
   # The collection of composed compositions
   compositions: null
 
-  # Temporary stores promises for failed compositions to reject compositions
-  # dependent from them
-  rejectedCompositionPromises: null
-
-  # Indicated async compose level: 0 - no compose now, 1 - do compose,
-  # >1 - new compose started before previous is finished
-  composeLevel: 0,
+  # Unique ID of current dispatcher state
+  currentStateId: null,
 
   # Global error handler is called when any composition compose is failed.
   # It gets failed composition item as parameter and continue execution if
   # returns new promise; otherwise composition is removed
   composeError: null
 
-  # Factory method returning a new instance of a deferred class
-  deferredCreator: null
+  # Promise implementation compatible with ES6 Promise API
+  Promise: null
 
   # Deferred object which stores state of current controller action execution
   actionDeferred: null
@@ -54,15 +49,15 @@ module.exports = class Composer
     # Taking a global compose error handler from options
     @composeError = options.composeError
 
-    # Taking a deferred object factory function from options
-    @deferredCreator = options.deferredCreator
+    # Taking a Promise implementation from options
+    @Promise = options.Promise
 
     # Initialize collections.
     @compositions = {}
-    @rejectedCompositionPromises = {}
 
     # Subscribe to events.
     mediator.setHandler 'composer:compose', @compose, this
+    @subscribeEvent 'dispatcher:initializeState', @beforeAction
     @subscribeEvent 'dispatcher:dispatch', @afterAction
 
   # Constructs a composition and composes into the active compositions.
@@ -135,48 +130,62 @@ module.exports = class Composer
 
   _compose: (name, options) ->
     # Create composition object from specified options
-    composition = @_createComposition options
+    newComposition = @_createComposition options
 
     # Initialize promise object for async operation execution
-    promise = @_createPromise()
+    promise = @_createPromise(newComposition)
 
     # Check for an existing composition
-    current = @compositions[name]
-    if current
+    currentComposition = @compositions[name]
+    if currentComposition
       # Apply the check method
-      if current.check composition.options
+      if currentComposition.check newComposition.options
         # Update current composition with new one
-        promise = @_mergeComposition current, composition, promise
+        promise = @_mergeComposition promise, name, currentComposition
 
         # Reuse current composition
-        composition = current
+        composition = currentComposition
       else
+        # Use new composition
+        composition = newComposition
+
+        # Build map of dependencies to dispose compositions in correct order
+        dependentMap = @_buildDependentMap()
+
         # Remove the current composition
-        current.dispose()
+        @_disposeComposition name, dependentMap
+    else
+      # Use new composition
+      composition = newComposition
 
     # Mark the current composition as not stale
     composition.stale false
 
+    # Also set stale property on the new composition
+    # for a case when currentComposition promise fails in @_mergeComposition
+    newComposition.stale false if composition isnt newComposition
+
+    # Store composition
+    @compositions[name] = composition
+
     # Resolve composition dependencies
-    promise = @_resolveDependencies composition, promise
+    promise = @_resolveDependencies promise, composition.dependencies
 
     # Apply compose method for new composition only
-    promise = @_composeComposition composition, promise if composition isnt current
+    promise = @_composeComposition promise
 
     # Apply update method both for new and existing composition
-    promise = @_updateComposition composition, promise
+    promise = @_updateComposition promise
 
     # Add error handling for composition
-    promise = @_errorComposition name, composition, promise
-
-    # Prepare final promise resolving to composition item
-    promise = @_completeComposition composition, promise
+    promise = @_errorComposition promise, name
 
     # Store promise in composition when it needs async operation to complete
     composition.promise = promise
 
-    # Store composition
-    @compositions[name] = composition
+    # Also set promise property on the new composition
+    # for a case when currentComposition promise fails in @_mergeComposition
+    newComposition.promise = promise if composition isnt newComposition
 
     # Return composition item or promise which will be resolved to it
     composition.promise
@@ -208,125 +217,138 @@ module.exports = class Composer
     # Return new composition
     composition
 
-  _createPromise: ->
-    if not @deferredCreator?
-      throw new Error 'Deferred object factory function is not set'
+  _createPromise: (composition) ->
+    if not @Promise?
+      throw new Error 'Promise implementation is not set'
 
     # Create action deferred object to track 'dispatcher:dispatch' action and
     # execute new compositions after cleanup of old compositions
-    @actionDeferred = @deferredCreator() if not @actionDeferred
+    @actionDeferred = utils.Deferred @Promise if not @actionDeferred
 
     # Return new promise
-    @actionDeferred.promise()
+    @actionDeferred.promise().then ->
+      composition
 
-  _mergeComposition: (current, composition, promise) ->
-    # Take update method from new composition to use latest function context
-    current.update = composition.update
+  _mergeComposition: (promise, name, currentComposition) ->
+    # Save link to a promise of currentComposition
+    # because it promise field be synchronously updated in @_compose
+    currentCompositionPromise = currentComposition.promise
 
-    # If current composition is not resolved yet, include its promise to chain
-    if current.promise
-      _promise = promise
-      promise = current.promise.then ->
-        _promise
-      , ->
-        _promise
-      delete current.promise
+    promise.then (newComposition) =>
+      # Use the latest update method with the old composition
+      currentComposition.update = newComposition.update
 
-    # Return promise for chain
-    promise
+      currentCompositionPromise.then (currentComposition) ->
+        currentComposition
+      , =>
+        if currentComposition.composed
+          # Restore promise with the old composition
+          @Promise.resolve currentComposition
+        else
+          # Build map of dependencies to dispose compositions in correct order
+          dependentMap = @_buildDependentMap()
+          # Remove the current composition
+          @_disposeComposition name, dependentMap
+          # Store the new composition
+          @compositions[name] = newComposition
+          # Restore promise with the new composition
+          @Promise.resolve newComposition
 
-  _resolveDependencies: (composition, promise) ->
-    # Storage for composition items which are declared as dependencies
-    resolvedDependencies = []
+  _resolveDependencies: (promise, dependencies) ->
+    # Initialize an array for collecting dependency promises
+    dependencyPromises = []
 
-    # Enumerate declared composition dependencies
-    for dependencyName in composition.dependencies
-      # Get composition dependency
+    # Collect composition dependency promises
+    for dependencyName in dependencies
       dependency = @compositions[dependencyName]
 
       # Assert for programmer errors
       if not dependency? or dependency.stale()
         throw new Error "Composition dependency '" + dependencyName + "' is not available"
 
-      # Update promise chain
-      promise = do (promise, dependency, dependencyName) =>
-        # Chain dependency resolving
-        promise.then =>
-          # Return rejected promise if dependency was failed
-          return @rejectedCompositionPromises[dependencyName] if dependencyName of @rejectedCompositionPromises
+      dependencyPromises.push dependency.promise
 
-          # Return composition item or its promise
-          dependency.promise or dependency.item
-        .then (item) ->
-          # Append composition item (may be empty) to array of dependencies
-          resolvedDependencies.push item
+    promise.then (composition) =>
+      # Wait for all composition dependencies
+      dependenciesPromise = @Promise.all dependencyPromises
+      dependenciesPromise.then (dependencyCompositions) ->
+        # Forward not dependency compositions but its items
+        dependencyItems = _.map dependencyCompositions, (dependencyComposition) -> dependencyComposition.item
+        # Add array of dependency composition items to a resolution arguments
+        [composition, dependencyItems]
 
-    # Return promise for chain
-    promise.then ->
-      # Resolve to array of dependent composition items
-      resolvedDependencies
-
-  _composeComposition: (composition, promise) ->
-    # Temporary storage for composition dependencies
-    dependencies = null
+  _composeComposition: (promise) ->
+    # Save current dispatcher state to be able to check if it's changed later
+    initStateId = @currentStateId
 
     # Return promise for chain
-    promise.then (resolvedDependencies) ->
-      # Store dependencies to pass them further
-      dependencies = resolvedDependencies
+    promise.then ([composition, dependencyItems]) =>
+      # Reject composition promise if dispatcher state changed (redirect case)
+      if @currentStateId isnt initStateId
+        return @Promise.reject { abort: true }
+
+      # Skip calling compose method if it has been already called (redirect case)
+      if composition.composed
+        return [composition, dependencyItems]
 
       # Apply compose method to composition item passing as arguments
       # options and dependent composition items
-      composition.compose.apply composition.item, [composition.options].concat resolvedDependencies
-    .then ->
-      # Resolve to array of dependent composition items
-      dependencies
+      composeResult = composition.compose.apply composition.item, [composition.options].concat dependencyItems
 
-  _updateComposition: (composition, promise) ->
+      # Guarantee that result of the compose call is a promise
+      composePromise = @Promise.resolve composeResult
+
+      composePromise.then ->
+        # Mark composition as successfully composed
+        composition.composed = true
+
+        # Resolve to the composition and the array of dependency composition items
+        [composition, dependencyItems]
+
+  _updateComposition: (promise) ->
+    # Save current dispatcher state to be able to check if it's changed later
+    initStateId = @currentStateId
+
     # Return promise for chain
-    promise.then (resolvedDependencies) ->
+    promise.then ([composition, dependencyItems]) =>
+      # Reject composition promise if dispatcher state changed (redirect case)
+      if @currentStateId isnt initStateId
+        return @Promise.reject { abort: true }
+
       # Apply update method to composition item passing as arguments
       # options and dependent composition items
-      composition.update.apply composition.item, [composition.options].concat resolvedDependencies
+      updateResult = composition.update.apply composition.item, [composition.options].concat dependencyItems
 
-  _errorComposition: (name, composition, promise) ->
-    disposeComposition = () =>
-      # Save rejected composition promise
-      rejectedCompositionPromise = @rejectedCompositionPromises[name] = composition.promise;
-      # Dispose composition
-      @_disposeComposition name, {}
-      # Return rejected composition promise
-      rejectedCompositionPromise
+      # Guarantee that result of the update call is a promise
+      updatePromise = @Promise.resolve updateResult
 
+      updatePromise.then ->
+        # Resolve to the composition
+        composition
+
+  _errorComposition: (promise, name) ->
     # Return promise for chain
-    promise.then (result) ->
+    promise.then (composition) ->
       # Bypass result for success
-      return result
-    , =>
+      return composition
+    , (error) =>
+      # Bypass action abort
+      if error.abort
+        return @Promise.reject error
+
+      # Get rejected composition
+      composition = @compositions[name]
       # Otherwise apply error method to composition item
-      errorResult = composition.error.call composition.item, composition.options
+      errorResult = composition.error.call composition.item, error, composition.options
       # Apply global error handler if necessary
-      errorResult = @composeError composition.item if not errorResult? and @composeError
+      errorResult = @composeError error, composition.item if not errorResult? and @composeError
       # If any handler returned promise
       if errorResult? and errorResult.then
         # Use it to continue execution
-        return errorResult.then (result) ->
-          # Bypass result for success
-          return result
-          # Otherwise dispose failed composition
-        , disposeComposition
+        @Promise.resolve errorResult
       else
-        # Otherwise dispose failed composition
-        disposeComposition()
-
-  _completeComposition: (composition, promise) ->
-    # Create last promise for compose execution chain
-    promise.then ->
-      # TODO: Remove promise reference from composition only if it was not renewed
-      delete composition.promise if composition.promise is promise
-
-      # Resolve to composition item
-      composition.item
+        # Bypass error
+        @Promise.reject error
 
   _buildDependentMap: ->
     # Build map of composition dependencies in up-down direction,
@@ -363,42 +385,49 @@ module.exports = class Composer
     # Dispose composition
     composition.dispose()
 
-    # Execute after dispose callback
-    composition.afterDispose.apply null
+    # Execute after dispose callback only if compose is done
+    composition.afterDispose.apply null if composition.composed
 
     delete @compositions[name]
     return
 
   _waitForCompose: () ->
-    # Initialize promise to accumulate composition promises in
-    actionPromise = @deferredCreator().resolve().promise()
-
-    # TODO: Use Promise.all instead of sequence
-    # Collect all not resolved composition promises
+    # Collect all composition promises
+    compositionPromises = []
     for name, composition of @compositions
-      # Joins not resolved promises to the chain
-      actionPromise = do (actionPromise, composition) ->
-        promise = composition.promise
+      compositionPromises.push composition.promise
 
-        # Skip resolved compositions
-        return actionPromise unless promise
-
-        # Add promise to chain
-        actionPromise.then ->
-          promise
-        , ->
-          promise
-
-    actionPromise.then ->
+    # Wait for all compositions
+    compositionsPromise = @Promise.all compositionPromises
+    compositionsPromise.then ->
+      # Resolve promise to true
       true
-    , ->
+    , (error) =>
+      # Bypass action abort
+      if error.abort
+        return @Promise.reject error
+
+      # Else restore promise with a value false
       false
+
+  beforeAction: ->
+    actionDeferred = @actionDeferred
+
+    # Reject action deferred object (if presents)
+    # to prevent from starting async composition execution
+    # for previous dispatcher state (redirect case)
+    if @actionDeferred?
+      @actionDeferred = null
+      actionDeferred.reject { abort: true }
+
+    # Deactivate all newly created/refreshed compositions
+    @deactivateCompositions()
+
+    # Save generated unique id for current dispatcher state
+    @currentStateId = _.uniqueId('dispatcher_state_')
 
   afterAction: ->
     actionDeferred = @actionDeferred
-
-    # Increase compose level before async compose
-    @composeLevel++
 
     # Action method is done; perform post-action clean up
     @cleanup()
@@ -410,13 +439,21 @@ module.exports = class Composer
       actionDeferred.resolve()
 
     # Wait for all async compositions
-    @_waitForCompose().then (success) =>
-      # Cleanup temporary stored rejected promises
-      @rejectedCompositionPromises = {}
-      # Decrease compose level after async compose
-      @composeLevel--
+    waitForComposePromise = @_waitForCompose()
+    waitForComposePromise.then (success) =>
       # Dispatch event when all compositions are ready
-      @publishEvent 'composer:complete', success if @composeLevel == 0
+      @publishEvent 'composer:complete', success
+    , ->
+      return
+
+  deactivateCompositions: ->
+    # Declare all active compositions as deactivated (eg. to be removed
+    # on the next controller startup unless they are re-composed).
+    for name, composition of @compositions
+      composition.stale true
+
+    # Return nothing.
+    return
 
   # Declare all compositions as stale and remove all that were previously
   # marked stale without being re-composed.
@@ -432,13 +469,7 @@ module.exports = class Composer
     for name of @compositions
       this._disposeComposition name, dependentMap, staleFilter
 
-    # Declare all active compositions as de-activated (eg. to be removed
-    # on the next controller startup unless they are re-composed).
-    for name, composition of @compositions
-      composition.stale true
-
-    # Return nothing.
-    return
+    @deactivateCompositions()
 
   dispose: ->
     return if @disposed
