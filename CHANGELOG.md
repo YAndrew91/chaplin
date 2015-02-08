@@ -1,5 +1,13 @@
 See [upgrading guide](http://docs.chaplinjs.org/upgrading.html) if you're using old chaplin version and want to upgrade.
 
+# Chaplin 1.0.0-dev-11 (8 February 2015)
+* Reimplemented Composer:
+    * Async-only usage
+    * Use ES6 syntax Promise implementation
+    * Error handling
+    * Redirect handling
+    * Fix different edge-case bugs
+
 # Chaplin 1.0.0-dev-10 (26 Jule 2014)
 * Secret extension
 
