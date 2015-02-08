@@ -149,6 +149,17 @@ utils =
 
       params
 
+  # Promise Helpers
+  # ---------------
+
+  Deferred: (Promise) ->
+    deferred = {
+      promise: -> promise
+    }
+    promise = new Promise (resolve, reject) ->
+      _.extend deferred, { resolve, reject }
+    deferred
+
 # Backwards-compat.
 utils.queryParams = utils.querystring
 

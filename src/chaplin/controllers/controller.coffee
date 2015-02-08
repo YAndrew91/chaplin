@@ -39,8 +39,7 @@ module.exports = class Controller
   # Convenience method to publish the `!composer:compose` event. See the
   # composer for information on parameters, etc.
   reuse: (name) ->
-    method = if arguments.length is 1 then 'retrieve' else 'compose'
-    mediator.execute "composer:#{method}", arguments...
+    mediator.execute "composer:compose", arguments...
 
   # Deprecated method.
   compose: ->
