@@ -26,6 +26,7 @@ module.exports = class Router # This class does not extend Backbone.Router.
       pushState: isWebFile
       root: '/'
       trailing: no
+      paramsInQS: yes
 
     # Cached regex for stripping a leading subdir and hash/slash.
     @removeRoot = new RegExp('^' + utils.escapeRegExp(@options.root) + '(#)?')
@@ -86,8 +87,8 @@ module.exports = class Router # This class does not extend Backbone.Router.
       [controller, action] = target.split('#')
 
     # Let each match call provide its own trailing option to appropriate Route.
-    # Pass trailing value from the Router by default.
-    _.defaults options, trailing: @options.trailing
+    # Pass trailing and paramsInQS values from the Router by default.
+    _.defaults options, { trailing: @options.trailing, paramsInQS: @options.paramsInQS }
 
     # Create the route.
     route = new Route pattern, controller, action, options

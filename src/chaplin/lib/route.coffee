@@ -38,8 +38,6 @@ module.exports = class Route
     # Clone options.
     @options = if options then _.extend({}, options) else {}
 
-    @options.paramsInQS = true if @options.paramsInQS isnt false
-
     # Store the name on the route if given
     @name = @options.name if @options.name?
 
