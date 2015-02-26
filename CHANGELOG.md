@@ -1,5 +1,8 @@
 See [upgrading guide](http://docs.chaplinjs.org/upgrading.html) if you're using old chaplin version and want to upgrade.
 
+# Chaplin 1.0.0-dev-12 (26 February 2015)
+* Move default value of paramsInQS into Router and allow it to be overridden through Router constructor options too
+
 # Chaplin 1.0.0-dev-11 (8 February 2015)
 * Reimplemented Composer:
     * Async-only usage
